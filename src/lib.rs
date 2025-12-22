@@ -121,6 +121,10 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
     // cloud animation frame calculated from respawn_timer when needed
     enemies: [(u8, f32, f32, f32, f32, u8, u8, u16, bool, u8, bool, u16); 10],
 
+    // Penguin snowball projectiles (up to 5)
+    // Format: (active, x, y, vx, vy)
+    snowballs: [(bool, f32, f32, f32, f32); 5],
+
     // Gift Bombs
     gift_bombs: u8,  // Number of gift bombs Santa has
     gift_bomb_items: [(f32, f32, bool, u16); 5],  // Dropped gift bombs to pick up (x, y, active, despawn_timer)
@@ -254,6 +258,7 @@ impl GameState {
 
             projectiles: [(false, 0.0, 0.0, 0.0, false, 0.0); 6],
             enemies: [(0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, false, 0, false, 0); 10],
+            snowballs: [(false, 0.0, 0.0, 0.0, 0.0); 5],  // Penguin snowball projectiles
 
             gift_bombs: 0,
             gift_bomb_items: [(0.0, 0.0, false, 0); 5],
@@ -370,26 +375,49 @@ impl GameState {
             return;  // Don't process game logic while in menu
         }
         
-        // GAME OVER STATE - show game over screen
+        // GAME OVER STATE - show game over screen for 3 seconds then restart from level 1
         if self.show_game_over {
             self.game_over_timer += 1;
-            if self.game_over_timer >= 600 {  // 10 seconds
-                self.in_menu = true;
+            if self.game_over_timer >= 180 {  // 3 seconds
+                // Reset game completely and restart from level 1
                 self.show_game_over = false;
                 self.game_over_timer = 0;
-                log!("Returning to menu from game over");
+                self.lives = 3;
+                self.score = 0;
+                self.player_hp = self.player_max_hp;
+                self.player_state = STATE_IDLE;
+                self.keys_collected = 0;
+                self.kids_collected = 0;
+                self.gift_bombs = 0;
+                self.boss_active = false;
+                self.boss_defeated = false;
+                self.use_boss_santa = false;
+                self.load_level(1);
+                log!("Game restarted from level 1!");
             }
             return;  // Don't process game logic during game over
         }
         
-        // VICTORY STATE - show victory screen
+        // VICTORY STATE - show victory screen for 3 seconds then restart from level 1
+        // Triggered when Santa collects kid from door 0 in level 3
         if self.show_victory {
             self.game_won_timer += 1;
             if self.game_won_timer >= 180 {  // 3 seconds
-                self.in_menu = true;
+                // Reset game completely and restart from level 1
                 self.show_victory = false;
                 self.game_won_timer = 0;
-                log!("Returning to menu from victory");
+                self.lives = 3;
+                self.score = 0;
+                self.player_hp = self.player_max_hp;
+                self.player_state = STATE_IDLE;
+                self.keys_collected = 0;
+                self.kids_collected = 0;
+                self.gift_bombs = 0;
+                self.boss_active = false;
+                self.boss_defeated = false;
+                self.use_boss_santa = false;
+                self.load_level(1);
+                log!("Victory! Game restarted from level 1!");
             }
             return;  // Don't process game logic during victory
         }
@@ -397,6 +425,8 @@ impl GameState {
         // === PLAYING state logic below ===
         
         // BGM looping - restart if not playing
+        // Note: Turbo SDK 5.2.0 doesn't support runtime volume control via play_with_volume
+        // To reduce BGM volume by 40%, you'll need to edit the audio file itself using audio editing software
         if !audio::is_playing("bgm") {
             audio::play("bgm");
         }
@@ -496,6 +526,7 @@ impl GameState {
         self.update_enemies();
         self.check_enemy_collisions();  // Check for damage from enemies
         self.update_projectiles();
+        self.update_snowballs();  // Update penguin snowball projectiles
         self.update_placed_bombs();
 
         if self.timer > 0 {
@@ -597,12 +628,13 @@ impl GameState {
             self.player_anim_frame = 0;
             self.player_anim_timer = 0;
         } else {
-            // No lives left - Game Over
+            // No lives left AND health is 0 - Game Over!
+            // Trigger game over: lives <= 0 and player_hp <= 0
             self.show_game_over = true;
             self.game_over_timer = 0;
             self.player_state = STATE_DEAD;
             audio::play("santa_death");
-            log!("Game Over!");
+            log!("Game Over! Lives: {}, HP: {}", self.lives, self.player_hp);
         }
     }
 
@@ -1417,8 +1449,9 @@ impl GameState {
                     let dy = (self.player_y - self.enemies[i].2).abs();
 
                     // Trigger attack if player is within range
-                    let attack_range_h = if enemy_type == 3 { 50.0 } else { 10.0 }; // Penguin: 20px, Kickmouse: 10px
-                    if dx < attack_range_h && dy < 20.0 && !self.enemies[i].10 {
+                    let attack_range_h = if enemy_type == 3 { 30.0 } else { 10.0 }; // Penguin: 30px, Kickmouse: 10px
+                    let attack_range_v = if enemy_type == 3 { 10.0 } else { 20.0 }; // Penguin: 10px, Kickmouse: 20px
+                    if dx < attack_range_h && dy < attack_range_v && !self.enemies[i].10 {
                         self.enemies[i].10 = true;  // Start attack
                         self.enemies[i].6 = 0;  // Reset animation to frame 0
                         self.enemies[i].9 = 0;  // Reset timer
@@ -1427,6 +1460,20 @@ impl GameState {
                         if enemy_type == 3 {
                             // Set direction based on Santa's position relative to penguin
                             self.enemies[i].5 = if self.player_x > self.enemies[i].1 { 1 } else { 0 };
+                            
+                            // Spawn snowball projectile toward Santa
+                            let penguin_x = self.enemies[i].1;
+                            let penguin_y = self.enemies[i].2;
+                            let snowball_speed = 3.0;
+                            let vx = if self.player_x > penguin_x { snowball_speed } else { -snowball_speed };
+                            
+                            // Find an empty slot for snowball
+                            for snowball in self.snowballs.iter_mut() {
+                                if !snowball.0 {
+                                    *snowball = (true, penguin_x, penguin_y, vx, 0.0);
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -1509,6 +1556,53 @@ impl GameState {
                             self.enemies[i].6 = (self.enemies[i].6 + 1) % 8; // anim_frame cycles 0-7
                         }
                     }
+                }
+            }
+        }
+    }
+
+    fn update_snowballs(&mut self) {
+        // Update each active snowball
+        for snowball in self.snowballs.iter_mut() {
+            if snowball.0 {
+                // Move snowball
+                snowball.1 += snowball.3;  // x += vx
+                snowball.2 += snowball.4;  // y += vy (gravity can be added later)
+                
+                // Check collision with Santa (if not invulnerable)
+                if self.player_invuln_timer == 0 && self.player_state != STATE_DEAD {
+                    let dx = (snowball.1 - self.player_x).abs();
+                    let dy = (snowball.2 - self.player_y).abs();
+                    
+                    // Collision check: 16px radius
+                    if dx < 16.0 && dy < 16.0 {
+                        // Hit Santa! Deal 1 HP damage
+                        self.player_hp = self.player_hp.saturating_sub(1);
+                        
+                        // Play hurt sound
+                        let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                        audio::play(hurt_sfx);
+                        
+                        // Grant invulnerability frames (1 second)
+                        self.player_invuln_timer = 60;
+                        
+                        // Small knockback from snowball direction
+                        if snowball.3 > 0.0 {
+                            self.player_vx = 2.0;  // Push right
+                        } else {
+                            self.player_vx = -2.0; // Push left
+                        }
+                        self.player_vy = -2.0;  // Small upward push
+                        
+                        // Deactivate snowball
+                        snowball.0 = false;
+                        continue;
+                    }
+                }
+                
+                // Despawn if off-screen (traveled too far)
+                if snowball.1 < self.camera_x - 50.0 || snowball.1 > self.camera_x + SCREEN_WIDTH + 50.0 {
+                    snowball.0 = false;
                 }
             }
         }
@@ -2761,19 +2855,23 @@ impl GameState {
 
     fn render(&self) {
         
-        // GAME OVER STATE - show game over screen
+        // GAME OVER STATE - show gameoverpage.png sprite for 3 seconds
         if self.show_game_over {
-            sprite!("game_over", x = 0, y = 0);
+            sprite!("gameoverpage", x = 0, y = 0);
             return;
         }
         
-        // VICTORY STATE - show victory screen
+        // VICTORY STATE - show victory screen for 3 seconds
+        // Triggered when Santa collects kid from door index 0 in level 3
         if self.show_victory {
-            rect!(w = 360, h = 240, color = 0x000000ff);
-            text!("CONGRATULATIONS!", x = 90, y = 80, color = 0xffd700ff);
-            text!("You rescued all the kids!", x = 60, y = 110, color = 0xffffffff);
-            text!("Christmas is saved!", x = 80, y = 130, color = 0x00ff00ff);
-            text!("Final Score: {}", self.score; x = 100, y = 160, color = 0xffd700ff);
+            // Draw victory screen (use start_page as background for now)
+            sprite!("start_page", x = 0, y = 0);
+            // Overlay victory text
+            rect!(x = 60, y = 70, w = 240, h = 100, color = 0x000000dd);
+            text!("CONGRATULATIONS!", x = 90, y = 85, color = 0xffd700ff);
+            text!("You rescued all the kids!", x = 70, y = 110, color = 0xffffffff);
+            text!("Christmas is saved!", x = 85, y = 130, color = 0x00ff00ff);
+            text!("Final Score: {}", self.score; x = 110, y = 155, color = 0xffd700ff);
             return;
         }
         
@@ -2808,6 +2906,7 @@ impl GameState {
         self.draw_powerup1();  // PowerUp1 (boss level door #4)
         self.draw_gift_bombs();
         self.draw_enemies();
+        self.draw_snowballs();  // Penguin snowball projectiles
         // Boss entity
         self.draw_boss();
         
@@ -2831,20 +2930,8 @@ impl GameState {
             text!("Entering Level {}...", next_level; x = 110, y = 130, color = 0xffffffff);
         }
 
-        // Draw game over screen if dead with no lives
-        if self.player_state == STATE_DEAD && self.lives == 0 {
-            // Semi-transparent black overlay
-            rect!(x = 0, y = 0, w = 360, h = 240, color = 0x000000cc);
-
-            // "GAME OVER" text
-            text!("GAME OVER", x = 120, y = 90, color = 0xff0000ff);
-
-            // Final score
-            text!("FINAL SCORE: {}", self.score; x = 100, y = 120, color = 0xffffffff);
-
-            // Restart instruction
-            text!("Press ENTER to restart", x = 80, y = 150, color = 0xaaaaaaff);
-        }
+        // Game over is now handled at the top of render() with show_game_over flag
+        // The gameoverpage.png sprite is shown for 3 seconds then game restarts from level 1
     }
 
     fn draw_ladders(&self) {
@@ -3419,6 +3506,18 @@ impl GameState {
         }
     }
 
+    fn draw_snowballs(&self) {
+        // Draw penguin snowball projectiles
+        for snowball in self.snowballs.iter() {
+            if snowball.0 {
+                let screen_x = (snowball.1 - self.camera_x) as i32;
+                let screen_y = snowball.2 as i32;
+                // Draw snowball sprite (sprite is centered, adjust for 16x16 sprite)
+                sprite!("enemy/penguin/snowball", x = screen_x - 8, y = screen_y - 8);
+            }
+        }
+    }
+
     fn draw_projectiles(&self) {
         for proj in self.projectiles.iter() {
             if proj.0 {
@@ -3531,14 +3630,11 @@ impl GameState {
                 self.life_collected = true;
                 self.life_active = false;
 
-                // Increase max HP by 3
-                self.player_max_hp = (self.player_max_hp + 3).min(99);  // Cap at 99 max HP
-
-                // Give 3 hearts (increase current HP by 3)
-                self.player_hp = (self.player_hp + 3).min(self.player_max_hp);
+                // Increase lives by 1 (from door 3 in level 3)
+                self.lives += 1;
 
                 self.score += 1000;
-                log!("Life powerup collected! HP: {}/{}", self.player_hp, self.player_max_hp);
+                log!("Life powerup collected! Lives: {}", self.lives);
             }
         }
     }
