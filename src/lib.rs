@@ -3879,19 +3879,19 @@ impl GameState {
             rect!(x = x, y = 7, w = 7, h = 4, color = 0xff0000ff);      // Body
         }
 
-        // Rest of HUD
-        text!("SCORE:{}", self.score; x = 110, y = 4, color = 0xffffffff);
-        text!("KEYS:{}", self.keys_collected; x = 180, y = 4, color = 0xffd700ff);
-        text!("KIDS:{}/{}", self.kids_collected, self.total_kids_in_level; x = 225, y = 4, color = 0x00ffffff);
-        text!("BOMBS:{}", self.gift_bombs; x = 280, y = 4, color = 0xffaa00ff);
+        // Rest of HUD - adjusted positions to prevent overlap
+        text!("SCORE:{}", self.score; x = 105, y = 4, color = 0xffffffff);
+        text!("KEYS:{}", self.keys_collected; x = 170, y = 4, color = 0xffd700ff);
+        text!("KIDS:{}/{}", self.kids_collected, self.total_kids_in_level; x = 215, y = 4, color = 0x00ffffff);
+        text!("BOM:{}", self.gift_bombs; x = 270, y = 4, color = 0xffaa00ff);
 
-        // Level timer (countdown)
+        // Level timer (countdown) - positioned at far right
         let remaining_frames = self.level_time_limit.saturating_sub(self.level_timer);
         let remaining_seconds = remaining_frames / 60;
         let minutes = remaining_seconds / 60;
         let secs = remaining_seconds % 60;
         let timer_color = if remaining_seconds < 30 { 0xff0000ff } else { 0xffffffff };
-        text!("TIME:{}:{:02}", minutes, secs; x = 310, y = 4, color = timer_color);
+        text!("{}:{:02}", minutes, secs; x = 320, y = 4, color = timer_color);
 
         // Visual feedback near player when a key is picked up
         if self.key_pickup_flash > 0 {
@@ -3945,38 +3945,128 @@ impl GameState {
 
 impl GameState {
     fn draw_controls_panel(&self) {
-        // Panel position and size
-        let panel_x = 20;
-        let panel_y = 40;
-        let panel_w = 320;
-        let panel_h = 160;
-
-        // Background
-        rect!(x = panel_x, y = panel_y, w = panel_w, h = panel_h, color = 0x000000bb);
-        // Border
-        rect!(x = panel_x, y = panel_y, w = panel_w, h = 2, color = 0xffffffff);
-        rect!(x = panel_x, y = panel_y + panel_h - 2, w = panel_w, h = 2, color = 0xffffffff);
-        rect!(x = panel_x, y = panel_y, w = 2, h = panel_h, color = 0xffffffff);
-        rect!(x = panel_x + panel_w - 2, y = panel_y, w = 2, h = panel_h, color = 0xffffffff);
-
-        // Title
-        text!("Controls (Press S to toggle)", x = panel_x + 10, y = panel_y + 8, color = 0xffd700ff);
-
-        // Implemented actions and keybinds
-        let mut y = panel_y + 28;
-        text!("Move: Arrow Left/Right", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Jump: X", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Attack: Z", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Place Bomb: C", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Crouch: Arrow Down", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Climb: Arrow Up/Down on ladder", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 12;
-        text!("Restart Level: Enter", x = panel_x + 10, y = y, color = 0xffffffff, font = "small"); y += 16;
-
-        // Bossfight-specific
-        text!("Boss Panel: S (toggle)", x = panel_x + 10, y = y, color = 0xffaa00ff, font = "small"); y += 12;
-
-        // Planned actions (to be implemented)
-        text!("Planned: Dash, Block, Roll, Interact", x = panel_x + 10, y = y, color = 0x88ffffff, font = "small");
+        // Panel dimensions
+        let panel_x = 15;
+        let panel_y = 25;
+        let panel_w = 330;
+        let panel_h = 190;
+        
+        // ============================================
+        // BACKGROUND - Festive dark overlay with gradient effect
+        // ============================================
+        // Outer shadow/glow
+        rect!(x = panel_x - 3, y = panel_y - 3, w = panel_w + 6, h = panel_h + 6, color = 0x00000066);
+        
+        // Main panel background - dark green Christmas feel
+        rect!(x = panel_x, y = panel_y, w = panel_w, h = panel_h, color = 0x0a1a12ee);
+        rect!(x = panel_x + 2, y = panel_y + 2, w = panel_w - 4, h = panel_h - 4, color = 0x0d2818dd);
+        
+        // ============================================
+        // DECORATIVE BORDERS - Gold frame
+        // ============================================
+        rect!(x = panel_x, y = panel_y, w = panel_w, h = 3, color = 0xffd700ff);
+        rect!(x = panel_x, y = panel_y + panel_h - 3, w = panel_w, h = 3, color = 0xffd700ff);
+        rect!(x = panel_x, y = panel_y, w = 3, h = panel_h, color = 0xffd700ff);
+        rect!(x = panel_x + panel_w - 3, y = panel_y, w = 3, h = panel_h, color = 0xffd700ff);
+        
+        // Corner decorations (Christmas ornament style)
+        circ!(x = panel_x, y = panel_y, d = 10, color = 0xff3333ff);
+        circ!(x = panel_x + panel_w, y = panel_y, d = 10, color = 0x00cc00ff);
+        circ!(x = panel_x, y = panel_y + panel_h, d = 10, color = 0x00cc00ff);
+        circ!(x = panel_x + panel_w, y = panel_y + panel_h, d = 10, color = 0xff3333ff);
+        
+        // Inner gold dots on corners
+        circ!(x = panel_x, y = panel_y, d = 4, color = 0xffd700ff);
+        circ!(x = panel_x + panel_w, y = panel_y, d = 4, color = 0xffd700ff);
+        circ!(x = panel_x, y = panel_y + panel_h, d = 4, color = 0xffd700ff);
+        circ!(x = panel_x + panel_w, y = panel_y + panel_h, d = 4, color = 0xffd700ff);
+        
+        // ============================================
+        // TITLE SECTION
+        // ============================================
+        rect!(x = panel_x + 60, y = panel_y + 8, w = 210, h = 22, color = 0x8b0000cc);
+        rect!(x = panel_x + 62, y = panel_y + 10, w = 206, h = 18, color = 0xcc2222dd);
+        
+        // Title text with shadow
+        text!("GAME CONTROLS", x = panel_x + 109, y = panel_y + 13, color = 0x00000088);
+        text!("GAME CONTROLS", x = panel_x + 107, y = panel_y + 12, color = 0xffffffff);
+        
+        text!("Press S to close", x = panel_x + 125, y = panel_y + 33, color = 0xffd70099, font = "small");
+        rect!(x = panel_x + 20, y = panel_y + 45, w = panel_w - 40, h = 1, color = 0xffd70066);
+        
+        // ============================================
+        // CONTROLS GRID - Two columns with styled cards
+        // ============================================
+        let col1_x = panel_x + 15;
+        let col2_x = panel_x + 170;
+        let row_h = 22;
+        let start_y = panel_y + 55;
+        
+        // Column 1: MOVE
+        rect!(x = col1_x, y = start_y, w = 145, h = row_h - 2, color = 0x1a472aaa);
+        rect!(x = col1_x, y = start_y, w = 3, h = row_h - 2, color = 0x00ff00aa);
+        text!("MOVE", x = col1_x + 8, y = start_y + 5, color = 0x00ff00ff, font = "small");
+        text!("< > Arrows", x = col1_x + 70, y = start_y + 5, color = 0xffffffff, font = "small");
+        
+        // Column 1: JUMP
+        rect!(x = col1_x, y = start_y + row_h, w = 145, h = row_h - 2, color = 0x1a472aaa);
+        rect!(x = col1_x, y = start_y + row_h, w = 3, h = row_h - 2, color = 0x00ff00aa);
+        text!("JUMP", x = col1_x + 8, y = start_y + row_h + 5, color = 0x00ff00ff, font = "small");
+        text!("X Key", x = col1_x + 90, y = start_y + row_h + 5, color = 0xffffffff, font = "small");
+        
+        // Column 1: ATTACK
+        rect!(x = col1_x, y = start_y + row_h * 2, w = 145, h = row_h - 2, color = 0x2a1a1aaa);
+        rect!(x = col1_x, y = start_y + row_h * 2, w = 3, h = row_h - 2, color = 0xff6b6baa);
+        text!("ATTACK", x = col1_x + 8, y = start_y + row_h * 2 + 5, color = 0xff6b6bff, font = "small");
+        text!("Z Key", x = col1_x + 90, y = start_y + row_h * 2 + 5, color = 0xffffffff, font = "small");
+        
+        // Column 1: BOMB
+        rect!(x = col1_x, y = start_y + row_h * 3, w = 145, h = row_h - 2, color = 0x2a1a0aaa);
+        rect!(x = col1_x, y = start_y + row_h * 3, w = 3, h = row_h - 2, color = 0xffaa00aa);
+        text!("BOMB", x = col1_x + 8, y = start_y + row_h * 3 + 5, color = 0xffaa00ff, font = "small");
+        text!("C Key", x = col1_x + 90, y = start_y + row_h * 3 + 5, color = 0xffffffff, font = "small");
+        
+        // Column 2: CROUCH
+        rect!(x = col2_x, y = start_y, w = 145, h = row_h - 2, color = 0x1a472aaa);
+        rect!(x = col2_x, y = start_y, w = 3, h = row_h - 2, color = 0x00ff00aa);
+        text!("CROUCH", x = col2_x + 8, y = start_y + 5, color = 0x00ff00ff, font = "small");
+        text!("Down", x = col2_x + 100, y = start_y + 5, color = 0xffffffff, font = "small");
+        
+        // Column 2: CLIMB
+        rect!(x = col2_x, y = start_y + row_h, w = 145, h = row_h - 2, color = 0x1a472aaa);
+        rect!(x = col2_x, y = start_y + row_h, w = 3, h = row_h - 2, color = 0x00ff00aa);
+        text!("CLIMB", x = col2_x + 8, y = start_y + row_h + 5, color = 0x00ff00ff, font = "small");
+        text!("Up/Down", x = col2_x + 85, y = start_y + row_h + 5, color = 0xffffffff, font = "small");
+        
+        // Column 2: HELP
+        rect!(x = col2_x, y = start_y + row_h * 2, w = 145, h = row_h - 2, color = 0x1a1a2aaa);
+        rect!(x = col2_x, y = start_y + row_h * 2, w = 3, h = row_h - 2, color = 0x00aaffaa);
+        text!("HELP", x = col2_x + 8, y = start_y + row_h * 2 + 5, color = 0x00aaffff, font = "small");
+        text!("S Key", x = col2_x + 100, y = start_y + row_h * 2 + 5, color = 0xffffffff, font = "small");
+        
+        // Column 2: RESTART
+        rect!(x = col2_x, y = start_y + row_h * 3, w = 145, h = row_h - 2, color = 0x1a1a2aaa);
+        rect!(x = col2_x, y = start_y + row_h * 3, w = 3, h = row_h - 2, color = 0x8888ffaa);
+        text!("RESTART", x = col2_x + 8, y = start_y + row_h * 3 + 5, color = 0x8888ffff, font = "small");
+        text!("Enter", x = col2_x + 95, y = start_y + row_h * 3 + 5, color = 0xffffffff, font = "small");
+        
+        // ============================================
+        // FOOTER - Animated tips
+        // ============================================
+        rect!(x = panel_x + 20, y = panel_y + 155, w = panel_w - 40, h = 1, color = 0xffd70044);
+        
+        let tip_phase = (self.frame / 120) % 3;
+        let tip_text = match tip_phase {
+            0 => "Rescue kids and collect keys to progress!",
+            1 => "Defeat enemies to get gift bombs!",
+            _ => "Destroy doors to free the children!",
+        };
+        text!(tip_text, x = panel_x + 40, y = panel_y + 165, color = 0xff6b6bff, font = "small");
+        
+        // Snowflake decorations
+        let snow_offset = (self.frame / 8) % 20;
+        circ!(x = panel_x + 25, y = panel_y + 170 + (snow_offset as i32 % 10), d = 3, color = 0xffffff66);
+        circ!(x = panel_x + panel_w - 25, y = panel_y + 175 - (snow_offset as i32 % 10), d = 3, color = 0xffffff66);
     }
 }
-    
+        
