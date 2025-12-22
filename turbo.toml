@@ -1,8 +1,8 @@
-name = "gamem"
-version = "0.1.0"
-description = "An awesome game made in Turbo!"
-authors = ["Anonymous"]
+name = "Santa's Rescue"
+version = "1.0.0"
+description = "A precision 2D platformer - Save Christmas, One Present at a Time!"
+authors = ["Santa Rescue Team"]
 
 [canvas]
-width = 256
-height = 144
+width = 360
+height = 240

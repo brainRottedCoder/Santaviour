@@ -1,0 +1,134 @@
+{
+  "background": {
+    "name": "spritebg1080x240",
+    "width": 1080,
+    "height": 240,
+    "center": { "x": 540, "y": 120 }
+  },
+
+  "global_offset": {
+    "x": 60,
+    "y": 18,
+    "applies_to": "all tiles and collision boxes"
+  },
+
+  "tiles": [
+    {
+      "id": 1,
+      "absolute": { "x": 113, "y": 100 },
+      "size": { "w": 170, "h": 7 },
+      "collision": true
+    },
+    {
+      "id": 2,
+      "absolute": { "x": 100, "y": 46 },
+      "size": { "w": 1080, "h": 4 },
+      "collision": false,
+      "note": "decorative ceiling"
+    },
+    {
+      "id": 3,
+      "absolute": { "x": 328, "y": 100 },
+      "size": { "w": 134, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 4,
+      "absolute": { "x": 452, "y": 81 },
+      "size": { "w": 366, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 5,
+      "absolute": { "x": 759, "y": 168 },
+      "size": { "w": 202, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 6,
+      "absolute": { "x": 1057, "y": 168 },
+      "size": { "w": 23, "h": 9 },
+      "collision": true,
+      "note": "clamped to background width"
+    },
+    {
+      "id": 7,
+      "absolute": { "x": 60, "y": 231 },
+      "size": { "w": 45, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 8,
+      "absolute": { "x": 804, "y": 101 },
+      "size": { "w": 111, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 9,
+      "absolute": { "x": 665, "y": 168 },
+      "size": { "w": 103, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 10,
+      "absolute": { "x": 593, "y": 177 },
+      "size": { "w": 88, "h": 70 },
+      "collision": false,
+      "note": "tall decorative structure"
+    },
+    {
+      "id": 11,
+      "absolute": { "x": 537, "y": 168 },
+      "size": { "w": 112, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 12,
+      "absolute": { "x": 201, "y": 168 },
+      "size": { "w": 231, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 13,
+      "absolute": { "x": 60, "y": 168 },
+      "size": { "w": 191, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 14,
+      "absolute": { "x": 926, "y": 101 },
+      "size": { "w": 113, "h": 9 },
+      "collision": true
+    },
+    {
+      "id": 15,
+      "absolute": { "x": 60, "y": 231 },
+      "size": { "w": 970, "h": 9 },
+      "collision": true
+    }
+  ],
+
+  "floors": [
+    {
+      "name": "top",
+      "y": 100,
+      "tiles": [1, 3, 4, 8, 14]
+    },
+    {
+      "name": "middle",
+      "y": 168,
+      "tiles": [5, 6, 9, 11, 12, 13]
+    },
+    {
+      "name": "bottom",
+      "y": 231,
+      "tiles": [7, 15]
+    }
+  ],
+
+  "spawn": {
+    "type": "tile_based",
+    "tile_id": 1,
+    "offset": { "x": 16, "y": -32 }
+  }
+}
