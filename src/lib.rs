@@ -158,8 +158,10 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
     in_menu: bool,  // true = in start menu, false = playing
     game_over_timer: u16,  // Timer for game over screen (10 seconds)
     game_won_timer: u16,  // Timer for victory screen (3 seconds)
+    time_up_timer: u16,  // Timer for time up screen (3 seconds)
     show_game_over: bool,
     show_victory: bool,
+    show_time_up: bool,  // true = showing time up screen
 
     // Level completion
     level_complete: bool,
@@ -275,11 +277,13 @@ impl GameState {
             dev_mode: false,
             show_controls_panel: false,
             
-            in_menu: false,  // No start menu - go directly to game
+            in_menu: true,  // Start with menu screen
             show_game_over: false,
             show_victory: false,
+            show_time_up: false,
             game_over_timer: 0,
             game_won_timer: 0,
+            time_up_timer: 0,
 
             level_complete: false,
             level_transition_timer: 0,
@@ -372,6 +376,7 @@ impl GameState {
                 self.player_hp = self.player_max_hp;
                 log!("Game started from menu!");
             }
+            self.render();  // Render the menu screen
             return;  // Don't process game logic while in menu
         }
         
@@ -395,14 +400,15 @@ impl GameState {
                 self.load_level(1);
                 log!("Game restarted from level 1!");
             }
+            self.render();  // Continuously render game over screen
             return;  // Don't process game logic during game over
         }
         
-        // VICTORY STATE - show victory screen for 3 seconds then restart from level 1
+        // VICTORY STATE - show victory screen for 5 seconds then restart from level 1
         // Triggered when Santa collects kid from door 0 in level 3
         if self.show_victory {
             self.game_won_timer += 1;
-            if self.game_won_timer >= 180 {  // 3 seconds
+            if self.game_won_timer >= 300 {  // 5 seconds
                 // Reset game completely and restart from level 1
                 self.show_victory = false;
                 self.game_won_timer = 0;
@@ -419,6 +425,7 @@ impl GameState {
                 self.load_level(1);
                 log!("Victory! Game restarted from level 1!");
             }
+            self.render();  // Continuously render victory screen
             return;  // Don't process game logic during victory
         }
         
@@ -437,10 +444,35 @@ impl GameState {
             
             // Check time limit
             if self.level_timer >= self.level_time_limit {
-                // Time's up! Kill player
-                self.player_hp = 0;
+                // Time's up! Show time up screen
+                self.show_time_up = true;
+                self.time_up_timer = 0;
                 log!("Time's up! Level failed.");
             }
+        }
+        
+        // TIME UP STATE - show time up screen for 3 seconds then restart from level 1
+        if self.show_time_up {
+            self.time_up_timer += 1;
+            if self.time_up_timer >= 180 {  // 3 seconds
+                // Reset game completely and restart from level 1
+                self.show_time_up = false;
+                self.time_up_timer = 0;
+                self.lives = 3;
+                self.score = 0;
+                self.player_hp = self.player_max_hp;
+                self.player_state = STATE_IDLE;
+                self.keys_collected = 0;
+                self.kids_collected = 0;
+                self.gift_bombs = 0;
+                self.boss_active = false;
+                self.boss_defeated = false;
+                self.use_boss_santa = false;
+                self.load_level(1);
+                log!("Game restarted from level 1 after time up!");
+            }
+            self.render();  // Continuously render time up screen
+            return;  // Don't process game logic during time up
         }
 
         // Developer mode toggle and stage jump controls (Press . to toggle)
@@ -2855,23 +2887,28 @@ impl GameState {
 
     fn render(&self) {
         
+        // START MENU - show start_page.png sprite until user presses Enter
+        if self.in_menu {
+            sprite!("starting_page", x = 0, y = 0);
+            return;
+        }
+        
         // GAME OVER STATE - show gameoverpage.png sprite for 3 seconds
         if self.show_game_over {
             sprite!("gameoverpage", x = 0, y = 0);
             return;
         }
         
-        // VICTORY STATE - show victory screen for 3 seconds
+        // TIME UP STATE - show time_up.png sprite for 3 seconds
+        if self.show_time_up {
+            sprite!("time_up", x = 0, y = 0);
+            return;
+        }
+        
+        // VICTORY STATE - show gamewon.png sprite for 5 seconds
         // Triggered when Santa collects kid from door index 0 in level 3
         if self.show_victory {
-            // Draw victory screen (use start_page as background for now)
-            sprite!("start_page", x = 0, y = 0);
-            // Overlay victory text
-            rect!(x = 60, y = 70, w = 240, h = 100, color = 0x000000dd);
-            text!("CONGRATULATIONS!", x = 90, y = 85, color = 0xffd700ff);
-            text!("You rescued all the kids!", x = 70, y = 110, color = 0xffffffff);
-            text!("Christmas is saved!", x = 85, y = 130, color = 0x00ff00ff);
-            text!("Final Score: {}", self.score; x = 110, y = 155, color = 0xffd700ff);
+            sprite!("gamewon", x = 0, y = 0);
             return;
         }
         
