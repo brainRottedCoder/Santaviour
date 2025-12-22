@@ -151,8 +151,11 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
     show_controls_panel: bool,
     
     // Game state management
-    game_state: u8,  // 0 = START_MENU, 1 = PLAYING, 2 = GAME_OVER
+    in_menu: bool,  // true = in start menu, false = playing
     game_over_timer: u16,  // Timer for game over screen (10 seconds)
+    game_won_timer: u16,  // Timer for victory screen (3 seconds)
+    show_game_over: bool,
+    show_victory: bool,
 
     // Level completion
     level_complete: bool,
@@ -166,8 +169,8 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
     walls: [(f32, f32, f32, f32); 22], // x, y, width, height for each wall
 
     // Kids to rescue (up to 3 per level)
-    // Format: (x, y, active, collected, anim_frame, anim_timer)
-    kids: [(f32, f32, bool, bool, u8, u8); 3],
+    // Format: (x, y, active, collected, anim_frame, anim_timer, spawned_from_door_idx)
+    kids: [(f32, f32, bool, bool, u8, u8, i8); 3],
     kids_collected: u8,
     
     // Level timer (in frames, 60 fps)
@@ -267,8 +270,11 @@ impl GameState {
             dev_mode: false,
             show_controls_panel: false,
             
-            game_state: 0,  // Start at menu
+            in_menu: false,  // No start menu - go directly to game
+            show_game_over: false,
+            show_victory: false,
             game_over_timer: 0,
+            game_won_timer: 0,
 
             level_complete: false,
             level_transition_timer: 0,
@@ -292,7 +298,7 @@ impl GameState {
             key_pickup_flash: 0,
 
             // Kids state
-            kids: [(0.0, 0.0, false, false, 0, 0); 3],
+            kids: [(0.0, 0.0, false, false, 0, 0, -1); 3],
             kids_collected: 0,
             level_timer: 0,
             level_time_limit: 180 * 60,  // Default 3 minutes
@@ -351,37 +357,49 @@ impl GameState {
         
         let kb = keyboard::get();
         
-        // Handle different game states
-        match self.game_state {
-            0 => {
-                // START_MENU state
-                // Check for click on start button (simple: any click or Enter starts game)
-                if kb.enter().just_pressed() || kb.space().just_pressed() {
-                    self.game_state = 1;  // PLAYING
-                    self.load_level(1);
-                    self.lives = 3;
-                    self.score = 0;
-                    self.player_hp = self.player_max_hp;
-                    log!("Game started!");
-                }
-                return;  // Don't process game logic in menu
-            },
-            2 => {
-                // GAME_OVER state
-                self.game_over_timer += 1;
-                
-                // After 10 seconds (600 frames), return to menu
-                if self.game_over_timer >= 600 {
-                    self.game_state = 0;  // START_MENU
-                    self.game_over_timer = 0;
-                    log!("Returning to menu...");
-                }
-                return;  // Don't process game logic in game over
-            },
-            _ => {}  // PLAYING state - continue normal game logic
+        // MENU STATE - waiting to start game
+        if self.in_menu {
+            if kb.enter().just_pressed() {
+                self.in_menu = false;
+                self.load_level(1);
+                self.lives = 3;
+                self.score = 0;
+                self.player_hp = self.player_max_hp;
+                log!("Game started from menu!");
+            }
+            return;  // Don't process game logic while in menu
+        }
+        
+        // GAME OVER STATE - show game over screen
+        if self.show_game_over {
+            self.game_over_timer += 1;
+            if self.game_over_timer >= 600 {  // 10 seconds
+                self.in_menu = true;
+                self.show_game_over = false;
+                self.game_over_timer = 0;
+                log!("Returning to menu from game over");
+            }
+            return;  // Don't process game logic during game over
+        }
+        
+        // VICTORY STATE - show victory screen
+        if self.show_victory {
+            self.game_won_timer += 1;
+            if self.game_won_timer >= 180 {  // 3 seconds
+                self.in_menu = true;
+                self.show_victory = false;
+                self.game_won_timer = 0;
+                log!("Returning to menu from victory");
+            }
+            return;  // Don't process game logic during victory
         }
         
         // === PLAYING state logic below ===
+        
+        // BGM looping - restart if not playing
+        if !audio::is_playing("bgm") {
+            audio::play("bgm");
+        }
         
         // Update level timer
         if self.player_state != STATE_DEAD {
@@ -580,9 +598,10 @@ impl GameState {
             self.player_anim_timer = 0;
         } else {
             // No lives left - Game Over
-            self.game_state = 2;  // GAME_OVER
+            self.show_game_over = true;
             self.game_over_timer = 0;
             self.player_state = STATE_DEAD;
+            audio::play("santa_death");
             log!("Game Over!");
         }
     }
@@ -654,6 +673,7 @@ impl GameState {
                     self.player_state = STATE_JUMP;
                     self.jump_anim_frame = 0;
                     self.jump_anim_timer = 0;
+                    audio::play("jump");
                     if left {
                         self.player_facing_right = false;
                         self.player_vx = -WALK_SPEED;
@@ -755,6 +775,7 @@ impl GameState {
             // Reset jump animation
             self.jump_anim_frame = 0;
             self.jump_anim_timer = 0;
+            audio::play("jump");
         }
 
         // Variable jump height - release early for shorter jump
@@ -1227,6 +1248,7 @@ impl GameState {
                         // Hit boss: decrement HP and apply small knockback
                         self.projectiles[proj_idx].0 = false;
                         self.evil_santa_hp = self.evil_santa_hp.saturating_sub(2); // Increased damage
+                        audio::play("evilSanta_hurt");
                         self.evil_santa_vx = if proj_x < self.evil_santa_x { 0.8 } else { -0.8 };
                         self.evil_santa_flash_timer = 5; // Flash for 5 frames
                         // Reset to idle after hit if on ground
@@ -1259,6 +1281,10 @@ impl GameState {
 
                             // Add score for kill
                             self.score += 100;
+                            
+                            // Play randomized kill sound
+                            let kill_sfx = if self.frame % 2 == 0 { "santa_kill" } else { "santa_kill_2" };
+                            audio::play(kill_sfx);
 
                             break;  // Projectile can only hit one enemy
                         }
@@ -1278,6 +1304,8 @@ impl GameState {
                     // Apply modest damage and knockback
                     let damage = ((self.player_max_hp as f32 * 0.10).ceil() as u8).max(1);
                     self.player_hp = self.player_hp.saturating_sub(damage);
+                    let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                    audio::play(hurt_sfx);
                     self.player_invuln_timer = 60;
                     self.player_vx = if proj_x > self.player_x { -3.0 } else { 3.0 };
                     self.player_vy = -3.5;
@@ -1331,6 +1359,8 @@ impl GameState {
                     // Apply damage: 10% of max HP = 1 HP from max 10
                     let damage = ((self.player_max_hp as f32 * 0.1).ceil() as u8).max(1);
                     self.player_hp = self.player_hp.saturating_sub(damage);
+                    let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                    audio::play(hurt_sfx);
                     
                     // Set invulnerability frames (2 seconds at 60fps)
                     self.player_invuln_timer = 120;
@@ -1504,6 +1534,7 @@ impl GameState {
                     item.2 = false;  // Deactivate the item
                     self.gift_bombs = 1;  // Set to 1 bomb
                     self.score += 50;
+                    audio::play("collection");
                 }
             }
         }
@@ -1537,6 +1568,7 @@ impl GameState {
                     if self.placed_bombs[i].4 == 1 {
                         // Apply damage on first frame of explosion
                         self.check_bomb_damage(i);
+                        audio::play("explosion");
                     }
                     if self.placed_bombs[i].4 >= 10 {
                         self.placed_bombs[i].4 = 0;
@@ -1568,7 +1600,9 @@ impl GameState {
         if dx_player < 50.0 && dy_player < 50.0 {
             // Santa is caught in the explosion!
             if self.player_invuln_timer == 0 {
-                self.player_hp = self.player_hp.saturating_sub(2);  // Take 2 damage
+                 self.player_hp = self.player_hp.saturating_sub(2);  // Take 2 damage
+                let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                audio::play(hurt_sfx);
                 self.player_invuln_timer = 60;  // 1 second invulnerability
 
                 if self.player_hp == 0 {
@@ -1633,16 +1667,16 @@ impl GameState {
                         log!("PowerUp1 spawned from door {}!", door_idx);
                     }
                     // Check if this door spawns a kid
-                    // For level 3: doors 0 and 1 spawn KEYS (not kids) to unlock gates at the end
-                    // For other levels: kid_door_index spawns a kid
-                    else if self.level != 3 && door_idx == self.kid_door_index {
+                    // For level 3: doors 0 and 1 spawn KIDS (door 0 triggers victory when collected)
+                    // For other levels: kid_door_index spawns a kid  
+                    else if (self.level == 3 && (door_idx == 0 || door_idx == 1)) || (self.level != 3 && door_idx == self.kid_door_index) {
                         // Spawn a kid at the door position
                         // Find first available kid slot
                         for kid_idx in 0..self.kids.len() {
                             if !self.kids[kid_idx].2 && !self.kids[kid_idx].3 {
                                 let spawn_x = door_center_x;
                                 let spawn_y = door_center_y - 10.0;
-                                self.kids[kid_idx] = (spawn_x, spawn_y, true, false, 0, 0);
+                                self.kids[kid_idx] = (spawn_x, spawn_y, true, false, 0, 0, door_idx as i8);
                                 self.total_kids_in_level += 1;
                                 log!("Kid spawned from door {}!", door_idx);
                                 break;
@@ -1845,7 +1879,7 @@ impl GameState {
                 self.kids_collected = 0;
                 self.total_kids_in_level = 0;  // Will increment when kid spawns from door
                 for kid in self.kids.iter_mut() {
-                    *kid = (0.0, 0.0, false, false, 0, 0);
+                    *kid = (0.0, 0.0, false, false, 0, 0, -1);
                 }
             },
             2 => {
@@ -1993,7 +2027,7 @@ impl GameState {
                 self.kids_collected = 0;
                 self.total_kids_in_level = 0;  // Will increment when kid spawns from door
                 for kid in self.kids.iter_mut() {
-                    *kid = (0.0, 0.0, false, false, 0, 0);
+                    *kid = (0.0, 0.0, false, false, 0, 0, -1);
                 }
 
                 // ============================================================
@@ -2121,7 +2155,7 @@ impl GameState {
                 self.kids_collected = 0;
                 self.total_kids_in_level = 0;  // Will increment when kid spawns from door
                 for kid in self.kids.iter_mut() {
-                    *kid = (0.0, 0.0, false, false, 0, 0);
+                    *kid = (0.0, 0.0, false, false, 0, 0, -1);
                 }
 
                 // ============================================================
@@ -2356,6 +2390,14 @@ impl GameState {
                 }
 
                 // Transition to Attack
+                // Randomized attack warning sound
+                let warning_sound = match self.frame % 3 {
+                    0 => "evilsanta_before_attack",
+                    1 => "evilsanta_bfore_attak1",
+                    _ => "evilsanta_bfore_attack2",
+                };
+                audio::play(warning_sound);
+                
                 self.evil_santa_state = BOSS_STATE_ATTACK;
                 self.boss_phase = PHASE_WINDUP;
                 self.boss_phase_timer = 0;
@@ -2390,6 +2432,8 @@ impl GameState {
                                 if dx < 35.0 && dy < 35.0 && self.player_invuln_timer == 0 {
                                     let damage = 1; // Reduced damage
                                     self.player_hp = self.player_hp.saturating_sub(damage);
+                                    let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                                    audio::play(hurt_sfx);
                                     self.player_invuln_timer = 60;
                                     // Strong knockback
                                     self.player_vx = if self.evil_santa_vx > 0.0 { 5.0 } else { -5.0 };
@@ -2454,6 +2498,8 @@ impl GameState {
                                     if dx < impact_radius && dy < 50.0 && self.player_invuln_timer == 0 {
                                         let damage = 1; // Reduced damage
                                         self.player_hp = self.player_hp.saturating_sub(damage);
+                                        let hurt_sfx = if self.frame % 2 == 0 { "santa_hurt_1" } else { "santa_hurt_2" };
+                                        audio::play(hurt_sfx);
                                         self.player_invuln_timer = 60;
                                         // Knockup
                                         self.player_vy = -7.0;
@@ -2714,21 +2760,21 @@ impl GameState {
     }
 
     fn render(&self) {
-        // Handle different game states
-        match self.game_state {
-            0 => {
-                // START_MENU state - show starting page
-                sprite!("starting_page", x = 0, y = 0);
-                // Add text instruction
-                text!("Press ENTER or SPACE to start!", x = 80, y = 210, color = 0xffffffff);
-                return;
-            },
-            2 => {
-                // GAME_OVER state - show game over screen
-                sprite!("game_over", x = 0, y = 0);
-                return;
-            },
-            _ => {}  // PLAYING state - continue with normal rendering
+        
+        // GAME OVER STATE - show game over screen
+        if self.show_game_over {
+            sprite!("game_over", x = 0, y = 0);
+            return;
+        }
+        
+        // VICTORY STATE - show victory screen
+        if self.show_victory {
+            rect!(w = 360, h = 240, color = 0x000000ff);
+            text!("CONGRATULATIONS!", x = 90, y = 80, color = 0xffd700ff);
+            text!("You rescued all the kids!", x = 60, y = 110, color = 0xffffffff);
+            text!("Christmas is saved!", x = 80, y = 130, color = 0x00ff00ff);
+            text!("Final Score: {}", self.score; x = 100, y = 160, color = 0xffd700ff);
+            return;
         }
         
         // === PLAYING state rendering below ===
@@ -3507,6 +3553,7 @@ impl GameState {
                     self.keys_collected = self.keys_collected.saturating_add(1);
                     self.score += 100;
                     self.key_pickup_flash = 30;
+                    audio::play("collection");
                     // SFX hook (stub) – integrate Turbo audio when available
                     log!("SFX: key_pickup");
                 }
@@ -3522,8 +3569,8 @@ impl GameState {
 
         // Update each kid's animation
         for kid in self.kids.iter_mut() {
-            // Format: (x, y, active, collected, anim_frame, anim_timer)
-            let (_, _, active, collected, anim_frame, anim_timer) = kid;
+            // Format: (x, y, active, collected, anim_frame, anim_timer, spawned_from_door_idx)
+            let (_, _, active, collected, anim_frame, anim_timer, _) = kid;
 
             if *active && !*collected {
                 // Increment animation timer
@@ -3539,14 +3586,15 @@ impl GameState {
     }
 
     fn check_kid_collection(&mut self) {
-        for kid in self.kids.iter_mut() {
-            // Format: (x, y, active, collected, anim_frame, anim_timer)
+        for (kid_idx, kid) in self.kids.iter_mut().enumerate() {
+            // Format: (x, y, active, collected, anim_frame, anim_timer, spawned_from_door_idx)
             if kid.2 && !kid.3 {
                 let dx = (self.player_x - kid.0).abs();
                 let dy = (self.player_y - kid.1).abs();
 
                 // 20px pickup radius (slightly larger than keys)
                 if dx < 20.0 && dy < 20.0 {
+                    let door_idx = kid.6;
                     kid.3 = true; // Mark as collected
                     kid.2 = false; // Mark as inactive
                     self.kids_collected += 1;
@@ -3559,15 +3607,29 @@ impl GameState {
                     }
 
                     log!("SFX: kid_rescued - Kids rescued: {}/{}", self.kids_collected, self.total_kids_in_level);
+                    let kid_sfx = if self.frame % 2 == 0 { "meeting_kid" } else { "meeting_kid_2" };
+                    audio::play(kid_sfx);
+                    
+                    // Check for game victory: Level 3, door 0 kid
+                    if self.level == 3 && door_idx == 0 {
+                        self.show_victory = true;
+                        self.game_won_timer = 0;
+                        log!("Game Complete! Victory!");
+                    }
                 }
             }
         }
     }
 
     fn check_level_completion(&mut self) {
-        // Only check if player has collected all required keys
+        // Check if player has collected all required keys
         let required_keys = if self.level == 3 { 2 } else { 3 };
         if self.keys_collected < required_keys {
+            return;
+        }
+        
+        // Check if player has rescued all kids in the level
+        if self.kids_collected < self.total_kids_in_level {
             return;
         }
 
@@ -3608,6 +3670,7 @@ impl GameState {
             // Player entered the completion zone!
             self.level_complete = true;
             self.level_transition_timer = 120; // 2 seconds transition
+            audio::play("completion");
             log!("Level Complete! Transitioning to next level...");
         }
     }
