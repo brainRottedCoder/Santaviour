@@ -90,6 +90,7 @@ if __name__ == "__main__":
     # Files to process - add any files that need color reduction
     files_to_process = [
         "gamewon.png",
+        "controls.png",
         # Add more files here if needed:
         # "gameoverpage.png",
         # "time_up.png",

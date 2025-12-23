@@ -156,6 +156,7 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
     
     // Game state management
     in_menu: bool,  // true = in start menu, false = playing
+    show_controls: bool,  // true = showing controls page after starting page
     game_over_timer: u16,  // Timer for game over screen (10 seconds)
     game_won_timer: u16,  // Timer for victory screen (3 seconds)
     time_up_timer: u16,  // Timer for time up screen (3 seconds)
@@ -278,6 +279,7 @@ impl GameState {
             show_controls_panel: false,
             
             in_menu: true,  // Start with menu screen
+            show_controls: false,  // Controls page shown after starting page
             show_game_over: false,
             show_victory: false,
             show_time_up: false,
@@ -366,18 +368,30 @@ impl GameState {
         
         let kb = keyboard::get();
         
-        // MENU STATE - waiting to start game
+        // MENU STATE - two-step flow: starting_page -> controls -> game
         if self.in_menu {
             if kb.enter().just_pressed() {
+                // Show controls page
                 self.in_menu = false;
+                self.show_controls = true;
+                log!("Showing controls page");
+            }
+            self.render();  // Render the starting page
+            return;  // Don't process game logic while in menu
+        }
+        
+        // CONTROLS STATE - show controls page, press Enter to start game
+        if self.show_controls {
+            if kb.enter().just_pressed() {
+                self.show_controls = false;
                 self.load_level(1);
                 self.lives = 3;
                 self.score = 0;
                 self.player_hp = self.player_max_hp;
-                log!("Game started from menu!");
+                log!("Game started from controls page!");
             }
-            self.render();  // Render the menu screen
-            return;  // Don't process game logic while in menu
+            self.render();  // Render the controls page
+            return;  // Don't process game logic while showing controls
         }
         
         // GAME OVER STATE - show game over screen for 3 seconds then restart from level 1
@@ -2887,9 +2901,15 @@ impl GameState {
 
     fn render(&self) {
         
-        // START MENU - show start_page.png sprite until user presses Enter
+        // START MENU - show starting_page.png sprite until user presses Enter
         if self.in_menu {
             sprite!("starting_page", x = 0, y = 0);
+            return;
+        }
+        
+        // CONTROLS PAGE - show controls.png sprite until user presses Enter to start game
+        if self.show_controls {
+            sprite!("controls", x = 0, y = 0);
             return;
         }
         
