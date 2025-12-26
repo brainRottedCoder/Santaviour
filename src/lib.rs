@@ -443,28 +443,9 @@ impl GameState {
             return;  // Don't process game logic during victory
         }
         
-        // === PLAYING state logic below ===
-        
-        // BGM looping - restart if not playing
-        // Note: Turbo SDK 5.2.0 doesn't support runtime volume control via play_with_volume
-        // To reduce BGM volume by 40%, you'll need to edit the audio file itself using audio editing software
         if !audio::is_playing("bgm") {
             audio::play("bgm");
         }
-        
-        // Update level timer
-        if self.player_state != STATE_DEAD {
-            self.level_timer += 1;
-            
-            // Check time limit
-            if self.level_timer >= self.level_time_limit {
-                // Time's up! Show time up screen
-                self.show_time_up = true;
-                self.time_up_timer = 0;
-                log!("Time's up! Level failed.");
-            }
-        }
-        
         // TIME UP STATE - show time up screen for 3 seconds then restart from level 1
         if self.show_time_up {
             self.time_up_timer += 1;
@@ -487,6 +468,17 @@ impl GameState {
             }
             self.render();  // Continuously render time up screen
             return;  // Don't process game logic during time up
+        }
+        // Update level timer
+        if self.player_state != STATE_DEAD {
+            self.level_timer += 1;
+            if self.level_timer >= self.level_time_limit {
+                self.show_time_up = true;
+                self.time_up_timer = 0;
+                log!("Time's up! Level failed.");
+                self.render();
+                return;
+            }
         }
 
         // Developer mode toggle and stage jump controls (Press . to toggle)
