@@ -1,6 +1,6 @@
-/target
+target
+.kilo
 node_modules
-.vercel
 .env
 .env*.local
 .data

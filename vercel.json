@@ -1,0 +1,13 @@
+{
+  "framework": null,
+  "outputDirectory": "www",
+  "headers": [
+    {
+      "source": "/pkg/(.*)\\.wasm",
+      "headers": [{ "key": "Content-Type", "value": "application/wasm" }]
+    }
+  ],
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" }
+  ]
+}

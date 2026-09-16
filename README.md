@@ -162,10 +162,17 @@ gamem/
 │   ├── explosion.wav       # Bomb explosion
 │   ├── santa_death.wav     # Death sound
 │   └── ...                 # Additional SFX
+├── api/                    # Serverless routes (accounts, rooms, runs, admin)
+│   ├── _lib/               # Shared storage, session, ranking, admin helpers
+│   ├── auth/ rooms/ runs/  # Player-facing endpoints
+│   └── admin/[...path].js  # Whole admin API in one function
+├── scripts/                # Seed, tests, local dev server
 └── www/                    # Web build files
     ├── index.html
+    ├── admin.html          # Admin panel (password gated)
     ├── main.js
     ├── style.css
+    ├── app/                # Overlay + admin UI (survives `turbo export`)
     └── pkg/                # WASM build output
 ```
 
@@ -196,14 +203,51 @@ curl -fsSL https://releases.turbo.computer/install.sh | sh
 
 3. **Build and run the game**
 ```bash
-# Run in development mode
+# Live development (game only)
 turbo run
 
-# Build for production
-turbo build
+# Web export (regenerates www/, including main.turbo)
+turbo export
 ```
 
-The game will open in your default web browser!
+The game will open in your default web browser.
+
+After `turbo export`, restore the overlay hook if it was overwritten — add this line to `www/index.html` before `main.js`:
+
+```html
+<script type="module" src="./app/ui.js"></script>
+```
+
+See `www/app/README.md`.
+
+4. **Rooms, scores, and ranks** (shared across devices)
+
+Copy `.env.example` to `.env.local` and set `SESSION_SECRET`. For the hosted site, also add Upstash Redis (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`) in the Vercel project so every device shares one leaderboard. Without those Redis variables, `npx vercel dev` uses a local `.data/store.json` file (this computer only).
+
+```bash
+npm install
+npx vercel dev        # or: npm run dev  (no Vercel account needed)
+npm run seed
+```
+
+`npm run dev` starts `scripts/dev-server.mjs`, a small Node server that serves `www/` and dispatches `/api/*` to the same handlers Vercel uses. Set `PORT` to move it off 3000.
+
+Demo room code `DEMO01`. Sample logins (password `DemoPass1`): `SnowMaster`, `Rudolph`, `ElfRunner`. `npm run seed` also loads 10 extra demo players (`HollyDash`, `CocoaKing`, `FrostByte`, `NorthStar`, `SleighGirl`, `GiftNinja`, `IvyLeap`, `JingleBot`, `CoalMiner`, `QuietMouse`) across rooms `WARM4`, `NIGHT1`, `GIFT2`, and `COAL3` so the admin panel has a full board to inspect. Create your own account and join `DEMO01` as the fourth player.
+
+5. **Admin panel**
+
+Set `ADMIN_PASSWORD` (8+ characters) in `.env.local`, and in the Vercel project for the hosted site.
+
+From the game, press **Ctrl+Shift+A** (Mac: **Cmd+Shift+A**). That opens `/admin` — there is no button in the overlay, so players do not see it. You can also bookmark:
+
+```
+http://localhost:3000/admin           # local
+https://<your-site>/admin             # hosted
+```
+
+The panel asks for that password and nothing else — it is deliberately separate from player accounts, so no game login can ever reach it. Leaving `ADMIN_PASSWORD` unset disables the panel: the page loads but every route answers `503`.
+
+It shows every registered username, their global ranking across all rooms, their standing in each individual room, and their full run history. It can also delete a player, delete a room, reset a room's scoreboard, or clear a single run.
 
 ---
 
@@ -297,8 +341,8 @@ cargo build
 # Run with Turbo
 turbo run
 
-# Build WebAssembly
-cargo build --target wasm32-unknown-unknown --release
+# Export web build (rewrites www/; keep www/app/)
+turbo export
 ```
 
 ### Code Structure

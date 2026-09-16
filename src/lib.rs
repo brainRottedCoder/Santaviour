@@ -79,7 +79,8 @@ const SCREEN_WIDTH: f32 = 360.0;
 const SCREEN_HEIGHT: f32 = 240.0;
 const HUD_HEIGHT: f32 = 16.0;
 
-const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
+const LEVEL_TIME: u32 = 180 * 60; // 3 minutes of legacy timer; HUD uses level_time_limit
+const DEV_MODE_ENABLED: bool = false; // gated for ranked demo; set true for local level skips
 
 // ============================================================================
 // MAIN GAME STATE
@@ -230,6 +231,7 @@ const LEVEL_TIME: u32 = 180 * 60; // 60 minutes (3600 seconds)
         player_idle_timer: u32,
         // Boss death handling
         boss_death_timer: u16,
+        last_runstat_frame: u32,
     }
 
 impl GameState {
@@ -357,6 +359,7 @@ impl GameState {
         player_idle_x: 0.0,
         player_idle_timer: 0,
         boss_death_timer: 0,
+        last_runstat_frame: 0,
         };
 
         game.load_level(1);
@@ -389,85 +392,23 @@ impl GameState {
                 self.score = 0;
                 self.player_hp = self.player_max_hp;
                 log!("Game started from controls page!");
+                self.emit_run_event("run_start", "ok");
+                self.last_runstat_frame = self.frame;
             }
             self.render();  // Render the controls page
             return;  // Don't process game logic while showing controls
         }
         
-        // GAME OVER STATE - show game over screen for 3 seconds then restart from level 1
-        if self.show_game_over {
-            self.game_over_timer += 1;
-            if self.game_over_timer >= 180 {  // 3 seconds
-                // Reset game completely and restart from level 1
-                self.show_game_over = false;
-                self.game_over_timer = 0;
-                self.lives = 3;
-                self.score = 0;
-                self.player_hp = self.player_max_hp;
-                self.player_state = STATE_IDLE;
-                self.keys_collected = 0;
-                self.kids_collected = 0;
-                self.gift_bombs = 0;
-                self.boss_active = false;
-                self.boss_defeated = false;
-                self.use_boss_santa = false;
-                self.load_level(1);
-                log!("Game restarted from level 1!");
-            }
-            self.render();  // Continuously render game over screen
-            return;  // Don't process game logic during game over
+        // End-of-run screens: draw once, then return to the start menu.
+        // The JS overlay opens the room board with score instead of auto-restarting.
+        if self.show_game_over || self.show_victory || self.show_time_up {
+            self.render();
+            self.return_to_menu();
+            return;
         }
-        
-        // VICTORY STATE - show victory screen for 5 seconds then restart from level 1
-        // Triggered when Santa collects kid from door 0 in level 3
-        if self.show_victory {
-            self.game_won_timer += 1;
-            if self.game_won_timer >= 300 {  // 5 seconds
-                // Reset game completely and restart from level 1
-                self.show_victory = false;
-                self.game_won_timer = 0;
-                self.lives = 3;
-                self.score = 0;
-                self.player_hp = self.player_max_hp;
-                self.player_state = STATE_IDLE;
-                self.keys_collected = 0;
-                self.kids_collected = 0;
-                self.gift_bombs = 0;
-                self.boss_active = false;
-                self.boss_defeated = false;
-                self.use_boss_santa = false;
-                self.load_level(1);
-                log!("Victory! Game restarted from level 1!");
-            }
-            self.render();  // Continuously render victory screen
-            return;  // Don't process game logic during victory
-        }
-        
+
         if !audio::is_playing("bgm") {
             audio::play("bgm");
-        }
-        // TIME UP STATE - show time up screen for 3 seconds then restart from level 1
-        if self.show_time_up {
-            self.time_up_timer += 1;
-            if self.time_up_timer >= 180 {  // 3 seconds
-                // Reset game completely and restart from level 1
-                self.show_time_up = false;
-                self.time_up_timer = 0;
-                self.lives = 3;
-                self.score = 0;
-                self.player_hp = self.player_max_hp;
-                self.player_state = STATE_IDLE;
-                self.keys_collected = 0;
-                self.kids_collected = 0;
-                self.gift_bombs = 0;
-                self.boss_active = false;
-                self.boss_defeated = false;
-                self.use_boss_santa = false;
-                self.load_level(1);
-                log!("Game restarted from level 1 after time up!");
-            }
-            self.render();  // Continuously render time up screen
-            return;  // Don't process game logic during time up
         }
         // Update level timer
         if self.player_state != STATE_DEAD {
@@ -476,13 +417,22 @@ impl GameState {
                 self.show_time_up = true;
                 self.time_up_timer = 0;
                 log!("Time's up! Level failed.");
+                self.emit_run_event("run_fail", "time_up");
                 self.render();
+                self.return_to_menu();
                 return;
             }
         }
 
+        if self.frame.saturating_sub(self.last_runstat_frame) >= 60 {
+            self.last_runstat_frame = self.frame;
+            self.emit_run_event("run_progress", "tick");
+        }
+
         // Developer mode toggle and stage jump controls (Press . to toggle)
-        if kb.period().just_pressed() {
+        if !DEV_MODE_ENABLED {
+            self.dev_mode = false;
+        } else if kb.period().just_pressed() {
             self.dev_mode = !self.dev_mode;
         }
         if self.dev_mode {
@@ -569,8 +519,6 @@ impl GameState {
 
         if self.timer > 0 {
             self.timer -= 1;
-        } else {
-            self.player_hp = 0;
         }
         
         // Check for death and handle respawn/game over
@@ -673,7 +621,51 @@ impl GameState {
             self.player_state = STATE_DEAD;
             audio::play("santa_death");
             log!("Game Over! Lives: {}, HP: {}", self.lives, self.player_hp);
+            self.emit_run_event("run_fail", "game_over");
+            self.return_to_menu();
         }
+    }
+
+    fn return_to_menu(&mut self) {
+        self.in_menu = true;
+        self.show_controls = false;
+        self.show_game_over = false;
+        self.show_victory = false;
+        self.show_time_up = false;
+        self.game_over_timer = 0;
+        self.game_won_timer = 0;
+        self.time_up_timer = 0;
+        self.lives = 3;
+        self.score = 0;
+        self.player_hp = self.player_max_hp;
+        self.player_state = STATE_IDLE;
+        self.keys_collected = 0;
+        self.kids_collected = 0;
+        self.gift_bombs = 0;
+        self.boss_active = false;
+        self.boss_defeated = false;
+        self.use_boss_santa = false;
+        self.level_complete = false;
+        self.level_transition_timer = 0;
+        self.level = 1;
+    }
+
+    fn emit_run_event(&self, name: &str, detail: &str) {
+        if name != "run_start" && (self.in_menu || self.show_controls) {
+            return;
+        }
+        let payload = format!(
+            "{{\"level\":{},\"score\":{},\"kids\":{},\"keys\":{},\"hp\":{},\"lives\":{},\"detail\":\"{}\"}}",
+            self.level,
+            self.score,
+            self.kids_collected,
+            self.keys_collected,
+            self.player_hp,
+            self.lives,
+            detail
+        );
+        log!("RUNSTAT {} {}", name, payload);
+        events::emit(name, &payload);
     }
 
     fn handle_input(&mut self) {
@@ -3731,7 +3723,8 @@ impl GameState {
     }
 
     fn check_kid_collection(&mut self) {
-        for (kid_idx, kid) in self.kids.iter_mut().enumerate() {
+        let mut won = false;
+        for kid in self.kids.iter_mut() {
             // Format: (x, y, active, collected, anim_frame, anim_timer, spawned_from_door_idx)
             if kid.2 && !kid.3 {
                 let dx = (self.player_x - kid.0).abs();
@@ -3755,14 +3748,19 @@ impl GameState {
                     let kid_sfx = if self.frame % 2 == 0 { "meeting_kid" } else { "meeting_kid_2" };
                     audio::play(kid_sfx);
                     
-                    // Check for game victory: Level 3, door 0 kid
-                    if self.level == 3 && door_idx == 0 {
+                    // Victory only after Evil Santa is defeated, then the door-0 kid is rescued
+                    if self.level == 3 && door_idx == 0 && self.boss_defeated {
                         self.show_victory = true;
                         self.game_won_timer = 0;
                         log!("Game Complete! Victory!");
+                        won = true;
                     }
                 }
             }
+        }
+        if won {
+            self.emit_run_event("run_complete", "victory");
+            self.return_to_menu();
         }
     }
 
@@ -3817,6 +3815,7 @@ impl GameState {
             self.level_transition_timer = 120; // 2 seconds transition
             audio::play("completion");
             log!("Level Complete! Transitioning to next level...");
+            self.emit_run_event("level_clear", "ok");
         }
     }
 

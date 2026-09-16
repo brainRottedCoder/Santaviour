@@ -1,0 +1,18 @@
+export const state = {
+  user: null,
+  rooms: [],
+  room: null,
+  screen: "auth",
+  error: "",
+  turbo: null,
+  runLevel: 1,
+  lastScore: 0,
+  lastKids: 0,
+  lastKeys: 0,
+  lastLives: 0,
+  lastHp: 0,
+  lastRun: null,
+  runActive: false,
+  localStartedAt: null,
+  absoluteStats: false,
+};
