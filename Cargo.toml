@@ -2,6 +2,7 @@
 name = "santa-rescue"
 version = "1.0.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 turbo = { version = "5.2.0", package = "turbo-genesis-sdk" }
